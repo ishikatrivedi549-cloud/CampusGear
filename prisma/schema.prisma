@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id                  String     @id @default(cuid())
+  name                String
+  email               String     @unique
+  passwordHash        String?    @default("campus123")
+  enrollmentNumber    String     @unique
+  branch              String     // CSE, Mechanical, Civil, ECE, EEE, IT
+  currentSemester     Int        // 1 to 8 (0 for faculty/admin)
+  isVerified          Boolean    @default(false)
+  ratingAvg           Float      @default(5.0)
+  ratingCount         Int        @default(0)
+  completedExchanges  Int        @default(0)
+  estimatedSavingsInr Int        @default(0)
+  role                String     @default("STUDENT") // STUDENT, ADMIN
+  avatarUrl           String?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  listings            Listing[]
+  borrowedExchanges   Exchange[] @relation("BorrowerExchanges")
+  lentExchanges       Exchange[] @relation("LenderExchanges")
+  ratingsGiven        Rating[]   @relation("RaterRatings")
+  ratingsReceived     Rating[]   @relation("TargetUserRatings")
+  reportsSubmitted    Report[]   @relation("ReporterReports")
+}
+
+model PickupLocation {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  landmark    String
+  isSafeSpot  Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+model Listing {
+  id               String       @id @default(cuid())
+  title            String
+  description      String
+  category         String       // Textbook, Reference Book, Lab Gear / Mini-Drafter, Scientific Calculator, Lab Coat, Handwritten Notes, Electronics Kit
+  branch           String       // CSE, Mechanical, Civil, ECE, EEE, IT, General Engineering
+  semester         Int          // 1 to 8
+  subjectName      String       // e.g. "Engineering Drawing", "Database Management Systems"
+  subjectCode      String       // e.g. "ME202", "CS301"
+  isbn             String?
+  edition          String?
+  condition        String       // NEW, LIKE_NEW, GOOD, USABLE
+  exchangeMode     String       // SELL, LEND, DONATE
+  priceInr         Int          @default(0) // 0 for donate
+  lendDurationDays Int?         @default(7) // default lend duration in days
+  lendRateText     String?      // e.g. "₹50 / week"
+  depositInr       Int?         @default(0)
+  imageUrl         String?
+  status           String       @default("AVAILABLE") // AVAILABLE, RESERVED, LENT, COMPLETED, ARCHIVED
+  reservedUntil    DateTime?
+  lentUntil        DateTime?
+  ownerId          String
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  owner            User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  pickupSlots      PickupSlot[]
+  exchanges        Exchange[]
+  reports          Report[]
+}
+
+model PickupSlot {
+  id           String   @id @default(cuid())
+  listingId    String
+  locationName String   // e.g. "Central Library Entrance"
+  timeWindow   String   // e.g. "Mon-Fri 4:00 PM - 5:30 PM"
+  createdAt    DateTime @default(now())
+
+  listing      Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+}
+
+model Exchange {
+  id                        String    @id @default(cuid())
+  listingId                 String
+  borrowerId                String
+  lenderId                  String
+  exchangeMode              String    // SELL, LEND, DONATE
+  status                    String    @default("REQUESTED") // REQUESTED, APPROVED, PICKED_UP, RETURNED, COMPLETED, CANCELLED, REJECTED
+  pickupLocation            String
+  pickupTimeWindow          String
+  intendedReturnDate        DateTime?
+  holdExpiresAt             DateTime? // 24h reservation lock expires at
+  borrowerNote              String?
+  
+  // Handover Dual Confirmation
+  lenderConfirmedHandover   Boolean   @default(false)
+  borrowerConfirmedHandover Boolean   @default(false)
+  conditionChecklistLender  Boolean   @default(false)
+  conditionChecklistBorrower Boolean  @default(false)
+  handoverCompletedAt       DateTime?
+
+  // Return Dual Confirmation (for LEND mode)
+  lenderConfirmedReturn     Boolean   @default(false)
+  borrowerConfirmedReturn   Boolean   @default(false)
+  returnCompletedAt         DateTime?
+
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+
+  listing                   Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  borrower                  User      @relation("BorrowerExchanges", fields: [borrowerId], references: [id], onDelete: Cascade)
+  lender                    User      @relation("LenderExchanges", fields: [lenderId], references: [id], onDelete: Cascade)
+  ratings                   Rating[]
+}
+
+model Rating {
+  id           String   @id @default(cuid())
+  exchangeId   String
+  raterId      String
+  targetUserId String
+  score        Int      // 1 to 5
+  comment      String
+  createdAt    DateTime @default(now())
+
+  exchange     Exchange @relation(fields: [exchangeId], references: [id], onDelete: Cascade)
+  rater        User     @relation("RaterRatings", fields: [raterId], references: [id], onDelete: Cascade)
+  targetUser   User     @relation("TargetUserRatings", fields: [targetUserId], references: [id], onDelete: Cascade)
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  listingId   String
+  reporterId  String
+  reason      String
+  status      String   @default("PENDING") // PENDING, RESOLVED, DISMISSED
+  createdAt   DateTime @default(now())
+
+  listing     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  reporter    User     @relation("ReporterReports", fields: [reporterId], references: [id], onDelete: Cascade)
+}
